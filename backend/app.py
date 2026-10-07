@@ -5,16 +5,40 @@ import sqlite3
 from datetime import date, timedelta
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, session
 from flask_cors import CORS
+from dotenv import load_dotenv
+from werkzeug.security import check_password_hash, generate_password_hash
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / ".env")
 DATABASE_PATH = Path(os.getenv("RESTAURANT_DB", BASE_DIR / "restaurant.db"))
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"
+AUTH_USERNAME = os.getenv("AUTH_USERNAME")
+AUTH_PASSWORD = os.getenv("AUTH_PASSWORD")
+AUTH_PASSWORD_HASH = generate_password_hash(AUTH_PASSWORD) if AUTH_PASSWORD else ""
+AUTH_SECRET_KEY = os.getenv("FLASK_SECRET_KEY") or os.urandom(32)
+
+if not AUTH_USERNAME or not AUTH_PASSWORD:
+    raise RuntimeError(
+        "AUTH_USERNAME and AUTH_PASSWORD must be set before starting the portal. "
+        "See .env.example for configuration."
+    )
 
 app = Flask(__name__)
-app.config["DATABASE_PATH"] = str(DATABASE_PATH)
-CORS(app, resources={r"/api/*": {"origins": os.getenv("CORS_ORIGINS", "http://localhost:5173")}})
+app.config.update(
+    DATABASE_PATH=str(DATABASE_PATH),
+    SECRET_KEY=AUTH_SECRET_KEY,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    SESSION_COOKIE_SECURE=os.getenv("FLASK_ENV") == "production",
+    PERMANENT_SESSION_LIFETIME=timedelta(hours=int(os.getenv("SESSION_TIMEOUT_HOURS", 8))),
+)
+CORS(
+    app,
+    resources={r"/api/*": {"origins": os.getenv("CORS_ORIGINS", "http://localhost:5173")}},
+    supports_credentials=False,
+)
 
 
 def get_db() -> sqlite3.Connection:
@@ -141,7 +165,48 @@ def database_error(message: str):
     return jsonify({"error": message}), 500
 
 
+def login_required(view):
+    from functools import wraps
+
+    @wraps(view)
+    def protected(*args, **kwargs):
+        if not session.get("authenticated"):
+            return jsonify({"error": "Authentication required"}), 401
+        return view(*args, **kwargs)
+
+    return protected
+
+
+@app.get("/api/auth/session")
+def auth_session():
+    return jsonify({"authenticated": bool(session.get("authenticated"))})
+
+
+@app.post("/api/auth/login")
+def login():
+    payload = request.get_json(silent=True) or {}
+    username = payload.get("username")
+    password = payload.get("password")
+    if not username or not password:
+        return jsonify({"error": "Username and password are required"}), 400
+    if username != AUTH_USERNAME or not check_password_hash(AUTH_PASSWORD_HASH, password):
+        return jsonify({"error": "Invalid username or password"}), 401
+
+    session.clear()
+    session["authenticated"] = True
+    session["username"] = username
+    session.permanent = True
+    return jsonify({"authenticated": True, "username": username})
+
+
+@app.post("/api/auth/logout")
+def logout():
+    session.clear()
+    return jsonify({"authenticated": False})
+
+
 @app.get("/api/staff")
+@login_required
 def staff():
     with get_db() as connection:
         rows = connection.execute(
@@ -151,6 +216,7 @@ def staff():
 
 
 @app.get("/api/schedule")
+@login_required
 def schedule():
     week_start = request.args.get("week_start", (date.today() - timedelta(days=date.today().weekday())).isoformat())
     with get_db() as connection:
@@ -169,6 +235,7 @@ def schedule():
 
 
 @app.get("/api/menu")
+@login_required
 def menu():
     with get_db() as connection:
         rows = connection.execute(
@@ -178,6 +245,7 @@ def menu():
 
 
 @app.post("/api/meal-requests")
+@login_required
 def create_meal_request():
     payload = request.get_json(silent=True) or {}
     required = ("employee_id", "request_date", "meal")
@@ -198,6 +266,7 @@ def create_meal_request():
 
 
 @app.get("/api/meal-requests")
+@login_required
 def meal_requests():
     with get_db() as connection:
         rows = connection.execute(

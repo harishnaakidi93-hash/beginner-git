@@ -11,7 +11,17 @@ A React + Flask restaurant operations portal for a 12-person kitchen team. It in
 
 ## Run locally
 
-### 1. Install the Python API
+### 1. Configure authentication
+
+Create the environment file from the example:
+
+```bash
+cp .env.example .env
+```
+
+Replace `AUTH_USERNAME`, `AUTH_PASSWORD`, and `FLASK_SECRET_KEY` with strong values. The `.env` file is ignored by Git and is never committed.
+
+### 2. Install the Python API
 
 ```bash
 python3 -m venv .venv
@@ -20,7 +30,7 @@ python -m pip install -r requirements.txt
 python backend/app.py
 ```
 
-The API runs on http://127.0.0.1:5000 and creates restaurant.db automatically.
+The API runs on http://127.0.0.1:5000 and creates restaurant.db automatically. The portal will require the configured administrator credentials before showing any data.
 
 ### 2. Install and run React
 
@@ -46,11 +56,13 @@ Flask serves the generated frontend from the backend. The database is stored at 
 
 ## Deployment
 
-The project is ready to deploy as a Flask application. Install the Python dependencies, run the production build, then start the server with:
+The application is ready to deploy as a Flask application. Configure the values in `.env`, install the Python dependencies, run the production build, then start the server with:
 
 ```bash
 python backend/app.py
 ```
+
+For production, set `FLASK_ENV=production`, use HTTPS, and keep the generated `.env` file private. The application uses HTTP-only session cookies and password hashing for authentication.
 
 For a Git clone, use:
 

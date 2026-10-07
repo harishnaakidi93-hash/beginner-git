@@ -9,6 +9,8 @@ import {
   Clock3,
   CupSoda,
   LayoutDashboard,
+  LockKeyhole,
+  LogOut,
   Menu,
   Plus,
   Search,
@@ -53,6 +55,14 @@ function App() {
   const [status, setStatus] = useState('')
   const [loading, setLoading] = useState(true)
   const [mobileNav, setMobileNav] = useState(false)
+  const [authenticated, setAuthenticated] = useState(null)
+  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [loginError, setLoginError] = useState('')
+  const [loginLoading, setLoginLoading] = useState(false)
+
+  useEffect(() => {
+    api('/auth/session').then((result) => setAuthenticated(result.authenticated)).catch(() => setAuthenticated(false))
+  }, [])
 
   const loadData = async () => {
     try {
@@ -71,7 +81,9 @@ function App() {
     }
   }
 
-  useEffect(() => { loadData() }, [weekStart])
+  useEffect(() => {
+    if (authenticated) loadData()
+  }, [weekStart, authenticated])
 
   const staffById = useMemo(() => Object.fromEntries(staff.map((person) => [person.id, person])), [staff])
   const today = new Date().toISOString().slice(0, 10)
@@ -111,6 +123,57 @@ function App() {
     { id: 'requests', label: 'Meal requests', icon: ChefHat },
   ]
 
+  const submitLogin = async (event) => {
+    event.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+    try {
+      await api('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(loginForm),
+      })
+      setAuthenticated(true)
+      setLoginForm({ username: '', password: '' })
+    } catch (error) {
+      setLoginError(error.message)
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  const logout = async () => {
+    try {
+      await api('/auth/logout', { method: 'POST' })
+    } finally {
+      setAuthenticated(false)
+    }
+  }
+
+  if (authenticated === null) {
+    return <div className="auth-loading"><div className="auth-spinner" /> Checking secure session…</div>
+  }
+
+  if (!authenticated) {
+    return (
+      <main className="login-page">
+        <section className="login-card">
+          <div className="login-brand"><div className="brand-mark"><Utensils size={24} /></div><div><strong>MAISON</strong><span>Restaurant operations</span></div></div>
+          <span className="eyebrow">SECURE ACCESS</span>
+          <h1>Welcome back</h1>
+          <p>Sign in to view the team schedule, daily menu, and meal requests.</p>
+          <form onSubmit={submitLogin}>
+            <label>Username<input autoComplete="username" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} required /></label>
+            <label>Password<input type="password" autoComplete="current-password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} required /></label>
+            {loginError && <div className="login-error">{loginError}</div>}
+            <button className="primary-button login-button" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in securely'}</button>
+          </form>
+          <div className="security-note"><ShieldCheck size={16} /> Protected by a secure server-side session</div>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <div className="app-shell">
       <aside className={`sidebar ${mobileNav ? 'open' : ''}`}>
@@ -129,6 +192,7 @@ function App() {
         </nav>
         <div className="sidebar-bottom">
           <div className="support-card"><ShieldCheck size={20} /><div><strong>Team portal</strong><span>All systems operational</span></div></div>
+          <button className="logout-button" onClick={logout}><LogOut size={16} /> Sign out</button>
           <div className="profile"><div className="avatar">AM</div><div><strong>Amelia Morgan</strong><span>Manager</span></div></div>
         </div>
       </aside>
