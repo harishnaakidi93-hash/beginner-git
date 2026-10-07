@@ -56,12 +56,26 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [mobileNav, setMobileNav] = useState(false)
   const [authenticated, setAuthenticated] = useState(null)
-  const [loginForm, setLoginForm] = useState({ username: '', password: '' })
+  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+  const [signupForm, setSignupForm] = useState({ name: '', email: '', password: '' })
+  const [resetForm, setResetForm] = useState({ email: '', token: '', password: '' })
   const [loginError, setLoginError] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
+  const [authMode, setAuthMode] = useState('login')
+  const [resetToken, setResetToken] = useState('')
+  const [currentUser, setCurrentUser] = useState(null)
 
   useEffect(() => {
-    api('/auth/session').then((result) => setAuthenticated(result.authenticated)).catch(() => setAuthenticated(false))
+    api('/auth/session').then((result) => {
+      setAuthenticated(result.authenticated)
+      setCurrentUser(result.user)
+    }).catch(() => setAuthenticated(false))
+
+    const resetTokenFromUrl = new URLSearchParams(window.location.search).get('token')
+    if (resetTokenFromUrl) {
+      setResetToken(resetTokenFromUrl)
+      setAuthMode('reset')
+    }
   }, [])
 
   const loadData = async () => {
@@ -128,17 +142,90 @@ function App() {
     setLoginError('')
     setLoginLoading(true)
     try {
-      await api('/auth/login', {
+      const result = await api('/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(loginForm),
       })
       setAuthenticated(true)
-      setLoginForm({ username: '', password: '' })
+      setCurrentUser(result.user)
+      setLoginForm({ email: '', password: '' })
     } catch (error) {
       setLoginError(error.message)
     } finally {
       setLoginLoading(false)
+    }
+  }
+
+  const submitSignup = async (event) => {
+    event.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+    try {
+      const result = await api('/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(signupForm),
+      })
+      setAuthenticated(true)
+      setCurrentUser(result.user)
+      setSignupForm({ name: '', email: '', password: '' })
+    } catch (error) {
+      setLoginError(error.message)
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  const submitForgotPassword = async (event) => {
+    event.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+    try {
+      const result = await api('/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: resetForm.email }),
+      })
+      setLoginError('')
+      setStatus(result.message)
+      setResetForm((current) => ({ ...current, email: '' }))
+      setAuthMode('login')
+    } catch (error) {
+      setLoginError(error.message)
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  const submitResetPassword = async (event) => {
+    event.preventDefault()
+    setLoginError('')
+    setLoginLoading(true)
+    try {
+      await api('/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password: resetForm.password }),
+      })
+      setStatus('Password updated. Sign in with your new password.')
+      setResetForm({ email: '', token: '', password: '' })
+      setResetToken('')
+      setAuthMode('login')
+    } catch (error) {
+      setLoginError(error.message)
+    } finally {
+      setLoginLoading(false)
+    }
+  }
+
+  const startSocialLogin = async (provider) => {
+    setLoginError('')
+    try {
+      const result = await api(`/auth/${provider}`)
+      window.location.assign(result.url)
+    } catch (error) {
+      setLoginError(error.message)
     }
   }
 
@@ -147,6 +234,7 @@ function App() {
       await api('/auth/logout', { method: 'POST' })
     } finally {
       setAuthenticated(false)
+      setCurrentUser(null)
     }
   }
 
@@ -160,14 +248,55 @@ function App() {
         <section className="login-card">
           <div className="login-brand"><div className="brand-mark"><Utensils size={24} /></div><div><strong>MAISON</strong><span>Restaurant operations</span></div></div>
           <span className="eyebrow">SECURE ACCESS</span>
-          <h1>Welcome back</h1>
-          <p>Sign in to view the team schedule, daily menu, and meal requests.</p>
-          <form onSubmit={submitLogin}>
-            <label>Username<input autoComplete="username" value={loginForm.username} onChange={(event) => setLoginForm({ ...loginForm, username: event.target.value })} required /></label>
-            <label>Password<input type="password" autoComplete="current-password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} required /></label>
-            {loginError && <div className="login-error">{loginError}</div>}
-            <button className="primary-button login-button" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in securely'}</button>
-          </form>
+          <h1>{authMode === 'login' ? 'Welcome back' : authMode === 'signup' ? 'Create your account' : 'Reset your password'}</h1>
+          <p>{authMode === 'login' ? 'Sign in to view the team schedule, daily menu, and meal requests.' : authMode === 'signup' ? 'Join the Maison team portal with your email address.' : 'Enter your email and the new password for your account.'}</p>
+
+          {authMode === 'login' && (
+            <>
+              <div className="social-grid">
+                <button type="button" className="social-button" onClick={() => startSocialLogin('google')}><span className="google-g">G</span> Google</button>
+                <button type="button" className="social-button" onClick={() => startSocialLogin('facebook')}><span className="facebook-f">f</span> Facebook</button>
+              </div>
+              <div className="divider"><span>or continue with email</span></div>
+              <form onSubmit={submitLogin}>
+                <label>Email address<input type="email" autoComplete="email" value={loginForm.email} onChange={(event) => setLoginForm({ ...loginForm, email: event.target.value })} required /></label>
+                <label>Password<input type="password" autoComplete="current-password" value={loginForm.password} onChange={(event) => setLoginForm({ ...loginForm, password: event.target.value })} required /></label>
+                <button type="button" className="text-button" onClick={() => { setAuthMode('forgot'); setLoginError('') }}>Forgot password?</button>
+                {loginError && <div className="login-error">{loginError}</div>}
+                <button className="primary-button login-button" disabled={loginLoading}>{loginLoading ? 'Signing in…' : 'Sign in securely'}</button>
+              </form>
+              <p className="auth-switch">New to Maison? <button type="button" onClick={() => setAuthMode('signup')}>Create an account</button></p>
+            </>
+          )}
+
+          {authMode === 'signup' && (
+            <form onSubmit={submitSignup}>
+              <label>Full name<input autoComplete="name" value={signupForm.name} onChange={(event) => setSignupForm({ ...signupForm, name: event.target.value })} required /></label>
+              <label>Email address<input type="email" autoComplete="email" value={signupForm.email} onChange={(event) => setSignupForm({ ...signupForm, email: event.target.value })} required /></label>
+              <label>Password<input type="password" autoComplete="new-password" minLength="8" value={signupForm.password} onChange={(event) => setSignupForm({ ...signupForm, password: event.target.value })} required /></label>
+              {loginError && <div className="login-error">{loginError}</div>}
+              <button className="primary-button login-button" disabled={loginLoading}>{loginLoading ? 'Creating account…' : 'Create account'}</button>
+              <p className="auth-switch">Already have an account? <button type="button" onClick={() => setAuthMode('login')}>Sign in</button></p>
+            </form>
+          )}
+
+          {authMode === 'forgot' && (
+            <form onSubmit={submitForgotPassword}>
+              <label>Email address<input type="email" autoComplete="email" value={resetForm.email} onChange={(event) => setResetForm({ ...resetForm, email: event.target.value })} required /></label>
+              {loginError && <div className="login-error">{loginError}</div>}
+              <button className="primary-button login-button" disabled={loginLoading}>{loginLoading ? 'Sending…' : 'Send reset link'}</button>
+              <p className="auth-switch"><button type="button" onClick={() => setAuthMode('login')}>Back to sign in</button></p>
+            </form>
+          )}
+
+          {authMode === 'reset' && (
+            <form onSubmit={submitResetPassword}>
+              <label>New password<input type="password" autoComplete="new-password" minLength="8" value={resetForm.password} onChange={(event) => setResetForm({ ...resetForm, password: event.target.value })} required /></label>
+              {loginError && <div className="login-error">{loginError}</div>}
+              <button className="primary-button login-button" disabled={loginLoading}>{loginLoading ? 'Updating…' : 'Update password'}</button>
+            </form>
+          )}
+
           <div className="security-note"><ShieldCheck size={16} /> Protected by a secure server-side session</div>
         </section>
       </main>

@@ -21,6 +21,8 @@ cp .env.example .env
 
 Replace `AUTH_USERNAME`, `AUTH_PASSWORD`, and `FLASK_SECRET_KEY` with strong values. The `.env` file is ignored by Git and is never committed.
 
+Users can sign up with email and password, sign in with Google or Facebook when OAuth credentials are configured, and request a password reset. Password reset requires SMTP settings. The administrator account is created automatically from the environment configuration.
+
 ### 2. Install the Python API
 
 ```bash
@@ -30,9 +32,9 @@ python -m pip install -r requirements.txt
 python backend/app.py
 ```
 
-The API runs on http://127.0.0.1:5000 and creates restaurant.db automatically. The portal will require the configured administrator credentials before showing any data.
+The API runs on http://127.0.0.1:5000 and creates restaurant.db automatically. The portal requires authentication before showing restaurant data.
 
-### 2. Install and run React
+### 3. Install and run React
 
 ```bash
 cd frontend
@@ -62,7 +64,9 @@ The application is ready to deploy as a Flask application. Configure the values 
 python backend/app.py
 ```
 
-For production, set `FLASK_ENV=production`, use HTTPS, and keep the generated `.env` file private. The application uses HTTP-only session cookies and password hashing for authentication.
+For production, set `FLASK_ENV=production`, use HTTPS, and keep the generated `.env` file private. The application uses HTTP-only session cookies, password hashing, and OAuth authorization-code authentication.
+
+Google and Facebook OAuth require credentials from their developer dashboards. Password reset requires an SMTP server and a public `APP_URL` that matches the deployed backend.
 
 For a Git clone, use:
 
