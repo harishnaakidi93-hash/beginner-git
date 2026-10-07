@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+restaurant.db
+restaurant.db-shm
+restaurant.db-wal
+frontend/node_modules/
+frontend/dist/
+.DS_Store
